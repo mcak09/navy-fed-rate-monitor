@@ -8,8 +8,28 @@ def get_rate():
     url = "https://www.navyfederal.org/loans-cards/mortgage/mortgage-rates/conventional-fixed-rate-mortgages.html"
     headers = {"User-Agent": "Mozilla/5.0"}
     resp = requests.get(url, headers=headers, timeout=15)
-    match = re.search(r'15 Year\s*\|?\s*([\d.]+%)', resp.text)
-    return match.group(1) if match else None
+    
+    # Try multiple patterns to find the 15 Year rate
+    patterns = [
+        r'15 Year\s*\|?\s*([\d.]+%)',
+        r'15 Year.*?([\d]+\.\d+%)',
+        r'"15 Year".*?([\d]+\.\d+%)',
+        r'15\s*Year[^%]*?([\d]+\.\d+)\s*%',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, resp.text, re.DOTALL)
+        if match:
+            return match.group(1) if '%' in match.group(1) else match.group(1) + '%'
+    
+    # Debug: print a snippet around "15 Year" to see what the page actually looks like
+    idx = resp.text.find('15 Year')
+    if idx != -1:
+        print("DEBUG snippet:", resp.text[idx:idx+200])
+    else:
+        print("DEBUG: '15 Year' not found in page at all")
+    
+    return None
 
 def send_sms(message):
     client = Client(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
@@ -40,8 +60,6 @@ def main():
         send_sms(msg)
         print("SMS sent!")
 
-    # Always write the current rate + timestamp so the repo
-    # always has a recent commit and GitHub never pauses the workflow
     with open("last_rate.txt", "w") as f:
         f.write(rate)
 
