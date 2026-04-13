@@ -1,0 +1,48 @@
+name: Navy Federal Rate Monitor
+
+on:
+  schedule:
+    - cron: '0 13 * * 1-5'  # 9am ET
+    - cron: '0 14 * * 1-5'  # 10am ET
+    - cron: '0 15 * * 1-5'  # 11am ET
+    - cron: '0 16 * * 1-5'  # 12pm ET
+    - cron: '0 17 * * 1-5'  # 1pm ET
+    - cron: '0 18 * * 1-5'  # 2pm ET
+    - cron: '0 19 * * 1-5'  # 3pm ET
+    - cron: '0 20 * * 1-5'  # 4pm ET
+    - cron: '0 21 * * 1-5'  # 5pm ET
+  workflow_dispatch:
+
+jobs:
+  check-rate:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests twilio
+
+      - name: Run rate checker
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+          TWILIO_TO: ${{ secrets.TWILIO_TO }}
+        run: python check_rate.py
+
+      - name: Commit updated rate file
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add last_rate.txt
+          git diff --staged --quiet || git commit -m "Update last known rate"
+          git push
