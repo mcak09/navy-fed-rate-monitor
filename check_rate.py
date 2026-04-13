@@ -1,48 +1,52 @@
-name: Navy Federal Rate Monitor
+import requests
+import re
+import os
+from datetime import datetime
+from twilio.rest import Client
 
-on:
-  schedule:
-    - cron: '0 13 * * 1-5'  # 9am ET
-    - cron: '0 14 * * 1-5'  # 10am ET
-    - cron: '0 15 * * 1-5'  # 11am ET
-    - cron: '0 16 * * 1-5'  # 12pm ET
-    - cron: '0 17 * * 1-5'  # 1pm ET
-    - cron: '0 18 * * 1-5'  # 2pm ET
-    - cron: '0 19 * * 1-5'  # 3pm ET
-    - cron: '0 20 * * 1-5'  # 4pm ET
-    - cron: '0 21 * * 1-5'  # 5pm ET
-  workflow_dispatch:
+def get_rate():
+    url = "https://www.navyfederal.org/loans-cards/mortgage/mortgage-rates/conventional-fixed-rate-mortgages.html"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=15)
+    match = re.search(r'15 Year\s*\|?\s*([\d.]+%)', resp.text)
+    return match.group(1) if match else None
 
-jobs:
-  check-rate:
-    runs-on: ubuntu-latest
+def send_sms(message):
+    client = Client(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+    client.messages.create(
+        body=message,
+        from_=os.environ["TWILIO_FROM"],
+        to=os.environ["TWILIO_TO"]
+    )
 
-    permissions:
-      contents: write
+def main():
+    rate = get_rate()
+    if not rate:
+        print("Could not parse rate.")
+        return
 
-    steps:
-      - uses: actions/checkout@v4
+    last_rate = None
+    if os.path.exists("last_rate.txt"):
+        with open("last_rate.txt") as f:
+            last_rate = f.read().strip()
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    print(f"Current rate: {rate} | Last rate: {last_rate}")
 
-      - name: Install dependencies
-        run: pip install requests twilio
+    if rate != last_rate:
+        if last_rate:
+            msg = f"Navy Federal 15-Year rate changed: {last_rate} -> {rate}"
+        else:
+            msg = f"Navy Federal 15-Year rate monitor started. Current rate: {rate}"
+        send_sms(msg)
+        print("SMS sent!")
 
-      - name: Run rate checker
-        env:
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
-          TWILIO_TO: ${{ secrets.TWILIO_TO }}
-        run: python check_rate.py
+    # Always write the current rate + timestamp so the repo
+    # always has a recent commit and GitHub never pauses the workflow
+    with open("last_rate.txt", "w") as f:
+        f.write(rate)
 
-      - name: Commit updated rate file
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add last_rate.txt
-          git diff --staged --quiet || git commit -m "Update last known rate"
-          git push
+    with open("last_checked.txt", "w") as f:
+        f.write(f"Last checked: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\nRate: {rate}\n")
+
+if __name__ == "__main__":
+    main()
