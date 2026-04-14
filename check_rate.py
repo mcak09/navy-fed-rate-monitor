@@ -8,27 +8,16 @@ def get_rate():
     url = "https://www.navyfederal.org/loans-cards/mortgage/mortgage-rates/conventional-fixed-rate-mortgages.html"
     headers = {"User-Agent": "Mozilla/5.0"}
     resp = requests.get(url, headers=headers, timeout=15)
-    
-    # Try multiple patterns to find the 15 Year rate
     patterns = [
         r'15 Year\s*\|?\s*([\d.]+%)',
         r'15 Year.*?([\d]+\.\d+%)',
         r'"15 Year".*?([\d]+\.\d+%)',
         r'15\s*Year[^%]*?([\d]+\.\d+)\s*%',
     ]
-    
     for pattern in patterns:
         match = re.search(pattern, resp.text, re.DOTALL)
         if match:
             return match.group(1) if '%' in match.group(1) else match.group(1) + '%'
-    
-    # Debug: print a snippet around "15 Year" to see what the page actually looks like
-    idx = resp.text.find('15 Year')
-    if idx != -1:
-        print("DEBUG snippet:", resp.text[idx:idx+200])
-    else:
-        print("DEBUG: '15 Year' not found in page at all")
-    
     return None
 
 def send_sms(message):
@@ -40,9 +29,13 @@ def send_sms(message):
     )
 
 def main():
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+
     rate = get_rate()
     if not rate:
         print("Could not parse rate.")
+        with open("check_log.txt", "a") as f:
+            f.write(f"{now} | ERROR: Could not parse rate\n")
         return
 
     last_rate = None
@@ -60,11 +53,13 @@ def main():
         send_sms(msg)
         print("SMS sent!")
 
+    # Always update last_rate.txt
     with open("last_rate.txt", "w") as f:
         f.write(rate)
 
-    with open("last_checked.txt", "w") as f:
-        f.write(f"Last checked: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\nRate: {rate}\n")
+    # Always append to check_log.txt so there's always a new commit
+    with open("check_log.txt", "a") as f:
+        f.write(f"{now} | Rate: {rate}\n")
 
 if __name__ == "__main__":
     main()
