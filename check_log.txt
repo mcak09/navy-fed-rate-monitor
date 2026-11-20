@@ -1364,3 +1364,4 @@
 2026-11-12 02:01 UTC | Rate: 6.125%
 2026-11-18 23:18 UTC | ERROR: Could not parse rate
 2026-11-19 21:54 UTC | ERROR: Could not parse rate
+2026-11-20 20:57 UTC | Rate: 6.125%
